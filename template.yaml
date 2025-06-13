@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+
+Parameters:
+  AppName:
+    Type: String
+    Default: workmail-intercepter-excel-to-csv
+    Description: The application name.
+
+  OriginFile:
+    Type: String
+    Default: report.csv
+    Description: -<
+      The name of the original file.
+
+  DestinationFile:
+    Type: String
+    Default: parsed_report.csv
+    Description: -<
+      The file name to save in the S3 bucket. Must ends with .csv extension.
+
+  DestinationBucket:
+    Type: String
+    Default: iris-netsuite
+    Description: The destination bucket.
+
+  WorkMailOrganizationId:
+    Type: String
+    Default: m-67deed14f6544078b7c2c8a8822a1ef6
+    Description: The WorkMail organization ID.
+
+Resources:
+  LambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: !Sub ${AWS::StackName}-lambda-role
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+          - arn:aws:iam::aws:policy/AmazonWorkMailMessageFlowFullAccess
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: ParametersPolicy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - "ssm:GetParameter"
+                    - "ssm:GetParameters"
+                    - "ssm:GetParametersByPath"
+                  Resource:
+                    - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:*
+
+          - PolicyName: Logging
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - "logs:CreateLogGroup"
+                    - "logs:CreateLogStream"
+                    - "logs:PutLogEvents"
+                  Resource: "arn:aws:logs:*:*:*"
+          - PolicyName: VPCPolicy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - "ec2:CreateNetworkInterface"
+                    - "ec2:DescribeNetworkInterfaces"
+                    - "ec2:DescribeSubnets"
+                    - "ec2:DeleteNetworkInterface"
+                    - "ec2:AssignPrivateIpAddresses"
+                    - "ec2:UnassignPrivateIpAddresses"
+                    - "ec2:DescribeSecurityGroups"
+                    - "ec2:DescribeVpcs"
+                    - "ec2:getSecurityGroupForVpc"
+                  Resource: "*"
+  WorkMailToS3:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Ref AppName
+      Role: !GetAtt LambdaRole.Arn
+      Environment:
+        Variables:
+          DESTINATION_BUCKET: !Ref DestinationBucket
+          DESTINATION_FILE: !Ref DestinationFile
+          ORIGIN_FILE: !Ref OriginFile
+
+      Description:
+        A Lambda function that logs the payload of messages sent to an
+        associated SQS queue.
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Handler: src/handlers/workmail.lambda_handler
+      MemorySize: 256
+      Timeout: 900
+      Layers:
+        - arn:aws:lambda:us-east-1:770693421928:layer:Klayers-p312-pandas:4
+        - arn:aws:lambda:us-east-1:770693421928:layer:Klayers-p312-numpy:2
