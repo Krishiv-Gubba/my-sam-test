@@ -25,5 +25,5 @@ jobs:
 
     # Run Unit tests- Specify unit tests here 
 
-    # sam deploy
+    # sam deplo
         - run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name sam-deploy-lambda --s3-bucket krishivbucket-us-east1 --capabilities CAPABILITY_NAMED_IAM --region us-east-1
